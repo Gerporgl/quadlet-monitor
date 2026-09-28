@@ -1,0 +1,14 @@
+[Unit]
+Description=Podman Monitor - detect container image updates and send ntfy notifications
+Documentation=man:quadlet-monitor
+After=podman-auto-update.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/quadlet-monitor/quadlet-monitor.sh
+# Give it a reasonable timeout in case registry calls are slow
+TimeoutStartSec=120
+
+[Install]
+WantedBy=podman-auto-update.service

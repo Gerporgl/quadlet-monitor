@@ -1,0 +1,141 @@
+# quadlet-monitor
+
+Detects when Podman Quadlet container images are updated and sends ntfy notifications.
+
+Works alongside the built-in `podman auto-update` systemd service on Ubuntu — no
+modification of any Podman or systemd packages.
+
+## How it works
+
+1. Maintains a **state file** (`/var/lib/quadlet-monitor/state.json`) mapping each
+   running container to its image digest and metadata.
+2. A systemd service (`quadlet-monitor.service`) runs **after** `podman-auto-update.service`
+   completes, diffs old vs new state, and sends an **ntfy notification** per changed container.
+3. A fallback **timer** (`quadlet-monitor.timer`) runs every 5 minutes to catch updates
+   triggered outside the auto-update cycle.
+
+### Detected changes
+
+- **Updated** containers (image digest changed) — the primary use case
+- The notification includes: container name, image reference, old/new digest,
+  version label (from `org.opencontainers.image.version`), build date, and
+  source URL (if the image sets `org.opencontainers.image.source`)
+
+### Not detected (v1)
+
+- New containers appearing
+- Containers being removed
+- Release notes (planned for a future version)
+
+## Requirements
+
+- Ubuntu 24.04+ (or similar) with Podman and Quadlet
+- `podman-auto-update.timer` enabled (the standard Podman auto-update setup)
+- `jq` and `curl` installed
+- An ntfy server (self-hosted or public)
+
+## Installation
+
+### From a public repo (curl pipe)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gerporgl/quadlet-monitor/master/install.sh \
+  | sudo bash -s -- https://ntfy.example.com/your-topic
+```
+
+### With an ntfy auth token
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gerporgl/quadlet-monitor/master/install.sh \
+  | sudo bash -s -- https://ntfy.example.com/your-topic your-secret-token
+```
+
+### From a clone (private repo or offline)
+
+```bash
+git clone git@github.com:Gerporgl/quadlet-monitor.git /tmp/quadlet-monitor
+sudo /tmp/quadlet-monitor/install.sh https://ntfy.example.com/your-topic
+```
+
+The installer:
+- Installs the monitor script to `/usr/local/bin/quadlet-monitor/`
+- Installs systemd units to `/etc/systemd/system/`
+- Creates config at `/etc/quadlet-monitor/quadlet-monitor.conf`
+- Creates state directory at `/var/lib/quadlet-monitor/`
+- Enables `quadlet-monitor.timer` and `quadlet-monitor.service`
+- Captures the initial container state (no notifications on first run)
+
+## Uninstallation
+
+```bash
+sudo /usr/local/bin/quadlet-monitor/uninstall.sh
+```
+
+This removes all installed files, disables the systemd units, and optionally
+removes the state data. The `podman-auto-update` service and timer are untouched.
+
+## Configuration
+
+`/etc/quadlet-monitor/quadlet-monitor.conf`:
+
+```ini
+# Full ntfy topic URL (server + topic path)
+NTFY_URL="https://ntfy.example.com/your-topic"
+# Optional: auth token for the ntfy topic
+NTFY_TOKEN=""
+```
+
+## Systemd units
+
+| Unit | Trigger | Purpose |
+|---|---|---|
+| `quadlet-monitor.service` | After `podman-auto-update.service` | Runs the check right after each auto-update |
+| `quadlet-monitor.timer` | Every 5 minutes | Fallback for updates outside the auto-update cycle |
+
+The service uses `WantedBy=podman-auto-update.service` which creates a symlink
+in `podman-auto-update.service.wants/` — standard systemd dependency, no existing
+files are modified.
+
+## ntfy message format
+
+```
+Title: 🐳 myapp: v2.0.3 → v2.1.0
+Priority: default
+Tags: 🐳
+
+Image:  docker.io/myorg/myapp:latest
+Digest:  sha256:abc123def456… → sha256:def789abc012…
+Version: v2.0.3 → v2.1.0
+Built:   2025-06-15T10:00:00Z
+Source:  https://github.com/myorg/myapp
+```
+
+## Troubleshooting
+
+```bash
+# Check service status
+systemctl status quadlet-monitor.service quadlet-monitor.timer
+
+# View logs
+journalctl -u quadlet-monitor.service --since "1 hour ago"
+
+# Run manually
+sudo /usr/local/bin/quadlet-monitor/quadlet-monitor.sh
+
+# Check current state
+cat /var/lib/quadlet-monitor/state.json | jq .
+```
+
+## Project layout
+
+```
+quadlet-monitor/
+├── install.sh              # Installer (self-contained)
+├── uninstall.sh            # Uninstaller
+├── README.md
+├── .gitignore
+└── src/
+    ├── quadlet-monitor.sh    # Main monitoring script
+    ├── quadlet-monitor.service  # Systemd service unit
+    └── quadlet-monitor.timer    # Fallback timer unit
+```
