@@ -44,7 +44,12 @@ INSTALL_DIR="/usr/local/bin/quadlet-monitor"
 CONFIG_DIR="/etc/quadlet-monitor"
 STATE_DIR="/var/lib/quadlet-monitor"
 SYSTEMD_DIR="/etc/systemd/system"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# When piped (curl | bash), BASH_SOURCE is empty — fall back to cwd
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="$(pwd)"
+fi
 
 # ---------------------------------------------------------------------------
 # Privilege check
