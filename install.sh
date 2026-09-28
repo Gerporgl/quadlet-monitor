@@ -184,15 +184,21 @@ get_current_state() {
         image_data=$(podman image inspect $images --format json 2>/dev/null) || image_data='[]'
     fi
 
-    # Build the state map
-    echo "$containers" | jq -n \
-        --argjson containers "$containers" \
-        --argjson images "$image_data" '
-        def find_image($img):
-            $images | map(select(.RepoTags != null and (.RepoTags | index($img))))
-                     | first // {};
+    # Build the state map (use temp files to avoid ARG_MAX limits)
+    local tmp_c tmp_i
+    tmp_c=$(mktemp) && tmp_i=$(mktemp)
+    echo "$containers" > "$tmp_c"
+    echo "$image_data" > "$tmp_i"
 
-        $containers | map(
+    jq -n \
+        --slurpfile containers "$tmp_c" \
+        --slurpfile images "$tmp_i" '
+        $containers[0] as $cs | $images[0] as $imgs |
+        def find_image($img):
+            $imgs | map(select(.RepoTags != null and (.RepoTags | index($img))))
+                   | first // {};
+
+        $cs | map(
             . as $c |
             {
                 key: $c.Names[0],
@@ -209,6 +215,7 @@ get_current_state() {
             }
         ) | from_entries
     '
+    rm -f "$tmp_c" "$tmp_i"
 }
 
 load_state() {
@@ -246,21 +253,28 @@ main() {
         return 0
     fi
 
-    # Find containers whose image digest changed
+    # Find containers whose image digest changed (temp files to avoid ARG_MAX)
+    local tmp_o tmp_n
+    tmp_o=$(mktemp) && tmp_n=$(mktemp)
+    echo "$old_state" > "$tmp_o"
+    echo "$new_state" > "$tmp_n"
+
     local updates
     updates=$(jq -n \
-        --argjson old "$old_state" \
-        --argjson new "$new_state" '
+        --slurpfile old "$tmp_o" \
+        --slurpfile new "$tmp_n" '
+        $old[0] as $o | $new[0] as $n |
         [
-            ($new | to_entries[] |
+            ($n | to_entries[] |
                 . as $e |
-                $old[$e.key] as $o |
-                select($o != null) |
-                select($o.digest != $e.value.digest) |
-                { name: $e.key, old: $o, new: $e.value }
+                $o[$e.key] as $old_entry |
+                select($old_entry != null) |
+                select($old_entry.digest != $e.value.digest) |
+                { name: $e.key, old: $old_entry, new: $e.value }
             )
         ]
     ')
+    rm -f "$tmp_o" "$tmp_n"
 
     local update_count
     update_count=$(echo "$updates" | jq 'length')
