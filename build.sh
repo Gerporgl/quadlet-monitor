@@ -47,6 +47,7 @@ replace_heredoc() {
         }
         { print }
     ' "$INSTALL_SH" > "$TMP_SH"
+    chmod 755 "$TMP_SH"
     mv "$TMP_SH" "$INSTALL_SH"
 }
 
