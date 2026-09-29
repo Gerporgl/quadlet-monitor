@@ -38,7 +38,7 @@ send_ntfy() {
         -sf -X POST
         -H "Title: $title"
         -H "Priority: $priority"
-        -H "Tags: 🐳"
+        -H "Tags: whale"
     )
     [[ -n "${NTFY_TOKEN:-}" ]] && curl_args+=(-H "Authorization: Bearer $NTFY_TOKEN")
 
@@ -194,11 +194,11 @@ main() {
             # Build title
             local title
             if [[ -n "$new_ver" && -n "$old_ver" && "$old_ver" != "$new_ver" ]]; then
-                title="🐳 $name: $old_ver → $new_ver"
+                title="$name: $old_ver → $new_ver"
             elif [[ -n "$new_ver" ]]; then
-                title="🐳 $name → $new_ver"
+                title="$name → $new_ver"
             else
-                title="🐳 $name updated"
+                title="$name updated"
             fi
 
             # Build body
