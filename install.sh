@@ -147,7 +147,7 @@ send_ntfy() {
     )
     [[ -n "${NTFY_TOKEN:-}" ]] && curl_args+=(-H "Authorization: Bearer $NTFY_TOKEN")
 
-    if curl "${curl_args[@]}" -d "$body" "$NTFY_URL" 2>/dev/null; then
+    if curl "${curl_args[@]}" -d "$body" -o /dev/null "$NTFY_URL" 2>/dev/null; then
         log "ntfy: sent '$title'"
     else
         log "ERROR: failed to send ntfy notification: $title"
